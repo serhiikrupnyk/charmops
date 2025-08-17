@@ -110,12 +110,34 @@ export default function Topbar({ onOpenSidebar }: TopbarProps) {
             >
               Вийти
             </button>
+            <Heartbeat />
           </div>
         </details>
+        
       </div>
     </header>
   );
 }
+
+function Heartbeat() {
+  // раз на 30 сек шлемо POST /api/me/ping
+  useEffect(() => {
+    let aborted = false;
+    const tick = async () => {
+      try {
+        await fetch("/api/me/ping", { method: "POST" });
+      } catch {}
+      if (!aborted) timer = window.setTimeout(tick, 30_000);
+    };
+    let timer = window.setTimeout(tick, 0);
+    return () => {
+      aborted = true;
+      clearTimeout(timer);
+    };
+  }, []);
+  return null;
+}
+
 
 function MenuLink({
   href,

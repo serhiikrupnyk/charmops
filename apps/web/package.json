@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed:superadmin": "tsx --env-file=.env.local scripts/seed-super-admin.ts"
+    "seed:superadmin": "tsx --env-file=.env.local scripts/seed-super-admin.ts",
+    "housekeeping": "tsx --env-file=.env.local scripts/housekeeping.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

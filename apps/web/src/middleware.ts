@@ -4,7 +4,7 @@ import { getToken } from "next-auth/jwt";
 const API_AUTH_PREFIX = "/api/auth";
 const NEXT_STATIC_PREFIX = "/_next";
 const PUBLIC_PAGES = ["/", "/login"];
-const PROTECTED_PAGES = ["/dashboard", "/access"]; // додали /access
+const PROTECTED_PAGES = ["/dashboard", "/access", "/operators"];
 
 export async function middleware(req: Request) {
   const url = new URL(req.url);
@@ -33,6 +33,4 @@ export async function middleware(req: Request) {
   return NextResponse.next();
 }
 
-export const config = {
-  matcher: ["/", "/login", "/dashboard", "/access"],
-};
+export const config = { matcher: ["/", "/login", "/dashboard", "/access", "/operators", "/operators/:path*"] };

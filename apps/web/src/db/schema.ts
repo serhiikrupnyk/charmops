@@ -1,5 +1,6 @@
 import {
   pgTable, serial, varchar, timestamp, boolean, integer, index,
+  pgEnum,
 } from "drizzle-orm/pg-core";
 /**
  * Користувачі. Ролі: super_admin | admin | operator
@@ -45,3 +46,62 @@ export const invitations = pgTable(
     inviterIdx: index("invitations_inviter_idx").on(t.invitedByUserId),
   })
 );
+
+// Платформи
+export const platformEnum = pgEnum("platform", ["sofiadate", "sakuradate"]);
+
+// Анкети (профілі)
+export const profiles = pgTable("profiles", {
+  id: serial("id").primaryKey(),
+  platform: platformEnum("platform").notNull(),
+  login: varchar("login", { length: 255 }).notNull(),
+  passwordEnc: varchar("password_enc", { length: 2048 }).notNull(),
+  displayName: varchar("display_name", { length: 255 }).notNull(),
+  locale: varchar("locale", { length: 16 }).default("en"),
+  avatarUrl: varchar("avatar_url", { length: 1024 }),
+  status: varchar("status", { length: 32 })
+    .$type<"active" | "paused" | "banned" | "archived">()
+    .default("active"),
+  assignedOperatorId: integer("assigned_operator_id")
+    .references(() => users.id, { onDelete: "set null" }),
+  createdByUserId: integer("created_by_user_id")
+    .references(() => users.id)
+    .notNull(),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => ({
+  loginIdx: index("profiles_login_idx").on(t.login),
+  operatorIdx: index("profiles_operator_idx").on(t.assignedOperatorId),
+  platformIdx: index("profiles_platform_idx").on(t.platform),
+}));
+
+// Онлайн-пінги оператора
+export const operatorActivity = pgTable("operator_activity", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  pingAt: timestamp("ping_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({
+  userIdx: index("operator_activity_user_idx").on(t.userId),
+  pingIdx: index("operator_activity_ping_idx").on(t.pingAt),
+}));
+
+//  Денні метрики оператора (MVP)
+export const operatorStatsDaily = pgTable("operator_stats_daily", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
+  replies: integer("replies").default(0),
+  avgReplySec: integer("avg_reply_sec").default(0),
+  replyRatePct: integer("reply_rate_pct").default(0), // 0..100
+}, (t) => ({
+  userDateIdx: index("operator_stats_user_date_idx").on(t.userId, t.date),
+}));
+
+export const operatorPresence = pgTable("operator_presence", {
+  userId: integer("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .primaryKey(),
+  lastPing: timestamp("last_ping", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
