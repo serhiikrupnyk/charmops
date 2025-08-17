@@ -1,0 +1,53 @@
+# === Node & package managers ===
+node_modules/
+**/node_modules/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# === Builds / outputs ===
+dist/
+build/
+out/
+.next/
+**/.next/
+.turbo/
+.next-static/
+.next-cache/
+
+# === Tests & coverage ===
+coverage/
+.vitest/
+.jest/
+
+# === TypeScript ===
+*.tsbuildinfo
+**/next-env.d.ts
+
+# === Env files (keep example) ===
+.env
+.env.*
+!.env.example
+
+# === Clouds / platforms ===
+.vercel
+
+# === IDE / OS ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# === Drizzle ORM caches (keep SQL migrations) ===
+drizzle/.cache/
+**/drizzle/.cache/
+**/drizzle/meta/*
+!**/drizzle/*.sql
