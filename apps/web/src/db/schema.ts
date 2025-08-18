@@ -105,3 +105,17 @@ export const operatorPresence = pgTable("operator_presence", {
     .notNull()
     .defaultNow(),
 });
+
+export const invites = pgTable("invites", {
+  id: serial("id").primaryKey(),
+  email: varchar("email", { length: 255 }).notNull(),
+  role: varchar("role", { length: 32 }).$type<"admin"|"operator">().notNull(),
+  token: varchar("token", { length: 255 }).notNull(),       // random string
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdByUserId: integer("created_by_user_id").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (t) => ({
+  tokenIdx: index("invites_token_idx").on(t.token),
+  emailIdx: index("invites_email_idx").on(t.email),
+}));

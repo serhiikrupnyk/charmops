@@ -40,6 +40,7 @@ const allowedByRole: Record<Role, Set<string>> = {
   ]),
   operator: new Set([
     "/dashboard",
+    "/profiles",
     "/chats",
     "/alerts",
     "/leaderboard",

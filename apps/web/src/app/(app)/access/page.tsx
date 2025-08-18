@@ -3,18 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 
-/* ================= Types ================= */
+/* ================= Types aligned with /api/invites ================= */
 type InviteRow = {
   id: number;
   email: string;
   role: "admin" | "operator";
-  invitedByUserId: number;
-  expiresAt: string | null;
-  acceptedAt: string | null;
-  revoked: boolean;
-  createdAt: string | null;
-  status: "active" | "accepted" | "expired" | "revoked";
-  link?: string; // only in POST response
+  token: string;
+  expiresAt: string;
+  usedAt: string | null;
+  createdByUserId: number;
+  createdAt: string;
+  // client-only derived:
+  status: "active" | "accepted" | "expired";
 };
 
 export default function AccessPage() {
@@ -45,18 +45,42 @@ export default function AccessPage() {
       : base;
   }, [canInviteAdmin]);
 
+  const APP_ORIGIN =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "");
+
+  /* ================= Helpers ================= */
+  const computeStatus = (r: {
+    usedAt: string | null;
+    expiresAt: string | null;
+  }): InviteRow["status"] => {
+    if (r.usedAt) return "accepted";
+    if (r.expiresAt && new Date(r.expiresAt).getTime() < Date.now())
+      return "expired";
+    return "active";
+  };
+
+  const withStatus = (rows: any[]): InviteRow[] =>
+    rows.map((r) => ({
+      ...r,
+      status: computeStatus(r),
+    }));
+
+  const fmt = (iso: string | null | undefined) =>
+    iso ? new Date(iso).toLocaleString() : "—";
+
   /* ================= Data ================= */
   const load = async () => {
     setLoading(true);
     setError(undefined);
-    const res = await fetch("/api/admin/invitations", { cache: "no-store" });
+    const res = await fetch("/api/invites", { cache: "no-store" });
     const data = await res.json().catch(() => ({}));
     setLoading(false);
     if (!res.ok) {
       setError(data?.error || "Не вдалось отримати інвайти");
       return;
     }
-    setList((data.invitations as InviteRow[]).sort((a, b) => b.id - a.id));
+    setList(withStatus(data.invites || []).sort((a, b) => b.id - a.id));
   };
 
   useEffect(() => {
@@ -69,7 +93,7 @@ export default function AccessPage() {
     e.preventDefault();
     setError(undefined);
     setCreating(true);
-    const res = await fetch("/api/admin/invitations", {
+    const res = await fetch("/api/invites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, role: roleToInvite }),
@@ -80,10 +104,33 @@ export default function AccessPage() {
       setError(data?.error || "Помилка створення інвайту");
       return;
     }
-    const inv = data.invitation as InviteRow;
-    setLastLink(inv.link); // доступний лише зараз
+    const inv = data.invite as {
+      id: number;
+      email: string;
+      role: "admin" | "operator";
+      token: string;
+      expiresAt: string;
+      usedAt: string | null;
+      createdByUserId: number;
+      createdAt: string;
+    };
+
+    // Посилання показуємо лише зараз (у відповіді GET його нема)
+    const link = `${APP_ORIGIN}/invite/${inv.token}`;
+    setLastLink(link);
+
     setEmail("");
-    setList((prev) => [{ ...inv, link: undefined }, ...prev]); // додати зверху
+    // оновлюємо список локально (зі статусом)
+    setList((prev) => {
+      const updated = { ...inv, status: computeStatus(inv) };
+      const idx = prev.findIndex((r) => r.id === inv.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = updated;                 // оновлюємо існуючий запис з цим id
+        return next.sort((a, b) => b.id - a.id);
+      }
+      return [updated, ...prev].sort((a, b) => b.id - a.id); // або додаємо, якщо нового id не було
+    });
   };
 
   const onCopyLink = async () => {
@@ -96,31 +143,14 @@ export default function AccessPage() {
     }
   };
 
-  const onRevoke = async (id: number) => {
-    const ok = confirm("Відreкликати цей інвайт?");
-    if (!ok) return;
-    const res = await fetch(`/api/admin/invitations/${id}`, { method: "PATCH" });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      alert(data?.error || "Не вдалося відкликати");
-      return;
-    }
-    setList((prev) =>
-      prev.map((r) =>
-        r.id === id ? { ...r, revoked: true, status: "revoked" } : r
-      )
-    );
-  };
-
-  const fmt = (iso: string | null) =>
-    iso ? new Date(iso).toLocaleString() : "—";
-
   /* ================= UI ================= */
   return (
     <div className="space-y-7">
       {/* Header */}
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold text-slate-900">Доступи / Інвайти</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">
+          Доступи / Інвайти
+        </h1>
         <p className="text-sm text-slate-600">
           Супер-адмін може запрошувати <b>адмінів</b> та <b>операторів</b>. Адмін — лише{" "}
           <b>операторів</b>.
@@ -241,7 +271,6 @@ export default function AccessPage() {
                 <Th>Запросив</Th>
                 <Th>Створено</Th>
                 <Th>Діє до</Th>
-                <Th className="text-right">Дія</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200/70">
@@ -249,7 +278,7 @@ export default function AccessPage() {
                 <SkeletonRows />
               ) : list.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-slate-600">
+                  <td colSpan={7} className="px-4 py-6 text-center text-slate-600">
                     Поки немає інвайтів
                   </td>
                 </tr>
@@ -259,10 +288,8 @@ export default function AccessPage() {
                     r.status === "active"
                       ? "bg-emerald-100 text-emerald-700"
                       : r.status === "accepted"
-                      ? "bg-blue-100 text-blue-700"
-                      : r.status === "expired"
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-rose-100 text-rose-700";
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-amber-100 text-amber-700";
 
                   return (
                     <tr
@@ -280,24 +307,9 @@ export default function AccessPage() {
                           {r.status}
                         </span>
                       </Td>
-                      <Td>#{r.invitedByUserId}</Td>
+                      <Td>#{r.createdByUserId}</Td>
                       <Td>{fmt(r.createdAt)}</Td>
                       <Td>{fmt(r.expiresAt)}</Td>
-                      <Td className="text-right">
-                        <button
-                          onClick={() => onRevoke(r.id)}
-                          disabled={r.status !== "active"}
-                          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-1.5 text-sm text-slate-800 hover:bg-slate-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                          title={
-                            r.status !== "active"
-                              ? "Дія недоступна"
-                              : "Відreкликати"
-                          }
-                        >
-                          <IconBan />
-                          Відreкликати
-                        </button>
-                      </Td>
                     </tr>
                   );
                 })
@@ -337,7 +349,7 @@ function SkeletonRows() {
     <>
       {Array.from({ length: 5 }).map((_, i) => (
         <tr key={i} className="animate-pulse">
-          {Array.from({ length: 8 }).map((__, j) => (
+          {Array.from({ length: 7 }).map((__, j) => (
             <td key={j} className="px-4 py-3">
               <div className="h-3 w-full rounded bg-slate-200/80" />
             </td>
@@ -353,14 +365,12 @@ function StatusDot({ status }: { status: InviteRow["status"] }) {
     status === "active"
       ? "bg-emerald-500"
       : status === "accepted"
-      ? "bg-blue-500"
-      : status === "expired"
-      ? "bg-amber-500"
-      : "bg-rose-500";
+        ? "bg-blue-500"
+        : "bg-amber-500";
   return <span aria-hidden className={`h-2 w-2 rounded-full ${cls}`} />;
 }
 
-/* ================= Icons (outline, soft) ================= */
+/* ================= Icons ================= */
 function IconSpinner(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" {...props} aria-hidden="true">
@@ -409,14 +419,6 @@ function IconRefresh(props: React.SVGProps<SVGSVGElement>) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-    </svg>
-  );
-}
-function IconBan(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" {...props} aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" fill="none" />
-      <path d="M7 7l10 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
